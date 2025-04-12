@@ -4,10 +4,10 @@ import axios from "axios";
 
 const MediaRecorderComponent: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  // const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [chunks, setChunks] = useState<Blob[]>([]);
+  // const [chunks, setChunks] = useState<Blob[]>([]);
   const [recording, setRecording] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
