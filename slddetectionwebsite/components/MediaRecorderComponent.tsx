@@ -14,7 +14,6 @@ const MediaRecorderComponent: React.FC = () => {
   const [subtitle, setSubtitle] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const subtitleRef = useRef(subtitle);
-  let count = 0;
 
   const startWebcam = async () => {
     try {
@@ -103,7 +102,7 @@ const MediaRecorderComponent: React.FC = () => {
   };
 
   const startFrameCapture = () => {
-    count = 0
+    let count = 0;
 
     const interval = setInterval(async () => {
       if (!videoRef.current || !canvasRef.current) return;
@@ -132,7 +131,7 @@ const MediaRecorderComponent: React.FC = () => {
         setSubtitle(label); // update current subtitle
         speakText(label);
       } catch (err) {
-        console.log(err)
+        console.log(err);
       }
 
       count++;
