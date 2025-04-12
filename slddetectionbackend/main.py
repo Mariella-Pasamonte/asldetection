@@ -7,7 +7,6 @@ import requests
 from starlette.concurrency import run_in_threadpool as RIT
 from PIL import Image
 import io
-import numpy as np
 from preprocess import predictASL, detect_hand_landmarks2D
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,9 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FILE_ID = "1A2B3C4D5E6F7G8H9I"
-MODEL_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
-MODEL_PATH = "/tmp/aslModel(a-cAndKira)150(80-20-100).pkl"
+MODEL_URL = f"https://mariella-asl-model-bucket.s3.ap-southeast-2.amazonaws.com/aslModel.pkl"
+MODEL_PATH = "/tmp/aslModel.pkl"
 model = None
 
 
@@ -31,6 +29,7 @@ def download_model():
     if not os.path.exists(MODEL_PATH):
         print("Downloading model...")
         response = requests.get(MODEL_URL)
+        response.raise_for_status()
         with open(MODEL_PATH, "wb") as f:
             f.write(response.content)
         print("Model downloaded.")
