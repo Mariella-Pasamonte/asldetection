@@ -24,24 +24,31 @@ app.add_middleware(
 FILE_ID = "1A2B3C4D5E6F7G8H9I"
 MODEL_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
 MODEL_PATH = "/tmp/aslModel(a-cAndKira)150(80-20-100).pkl"
+model = None
 
 
-if not os.path.exists(MODEL_PATH):
-    print("Downloading model...")
-    response = requests.get(MODEL_URL)
-    with open(MODEL_PATH, "wb") as f:
-        f.write(response.content)
-    print("Model downloaded.")
-else:
-    print("Model already exists.")
-    
-with open(MODEL_PATH, "rb") as f:
-    model=pickle.load(f)
+def download_model():
+    if not os.path.exists(MODEL_PATH):
+        print("Downloading model...")
+        response = requests.get(MODEL_URL)
+        with open(MODEL_PATH, "wb") as f:
+            f.write(response.content)
+        print("Model downloaded.")
+
+
+def get_model():
+    global model
+    if model is None:
+        download_model()
+        with open(MODEL_PATH, "rb") as f:
+            model = pickle.load(f)
+    return model
 
 def PredFunc(contents: bytes):
     image = Image.open(io.BytesIO(contents)).convert("RGB")
     image = np.array(image)
     landmarks = detect_hand_landmarks2D(image)
+    model = get_model()
     prediction = predictASL(model, landmarks)
     print("prediction:",prediction[0])
     if prediction:
