@@ -172,4 +172,4 @@ cython_debug/
 
 
 #custom
-model/*.pkl
+#model/*.pkl
