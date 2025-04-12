@@ -3,6 +3,7 @@ import mediapipe as mp
 import numpy as np
 import pickle
 import os
+import requests
 from starlette.concurrency import run_in_threadpool as RIT
 from PIL import Image
 import io
@@ -20,9 +21,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model_path = os.path.join(os.path.dirname(__file__), "model", "aslModel(a-cAndKira)150(80-20-100).pkl")
+FILE_ID = "1A2B3C4D5E6F7G8H9I"
+MODEL_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
+MODEL_PATH = "/tmp/aslModel(a-cAndKira)150(80-20-100).pkl"
 
-with open(model_path, "rb") as f:
+
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model...")
+    response = requests.get(MODEL_URL)
+    with open(MODEL_PATH, "wb") as f:
+        f.write(response.content)
+    print("Model downloaded.")
+else:
+    print("Model already exists.")
+    
+with open(MODEL_PATH, "rb") as f:
     model=pickle.load(f)
 
 def PredFunc(contents: bytes):
