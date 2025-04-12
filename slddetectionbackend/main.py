@@ -14,7 +14,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://asldetection-frontend.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,9 +30,8 @@ model = None
 
 def download_model():
     if not os.path.exists(MODEL_PATH):
-        print("Downloading model...")
+        print("Downloading model from S3...")
         response = requests.get(MODEL_URL)
-        response.raise_for_status()
         with open(MODEL_PATH, "wb") as f:
             f.write(response.content)
         print("Model downloaded.")
@@ -38,7 +40,7 @@ def download_model():
 def get_model():
     global model
     if model is None:
-        download_model()
+        download_model()  # Download model if not loaded already
         with open(MODEL_PATH, "rb") as f:
             model = pickle.load(f)
     return model

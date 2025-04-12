@@ -122,7 +122,8 @@ const MediaRecorderComponent: React.FC = () => {
 
       try {
         const response = await axios.post(
-          "http://192.168.1.11:8000/predict",
+          // "http://192.168.1.11:8000/predict",
+          "https://asldetection-backend.vercel.app/predict",
           formData
         );
         const label = response.data.result;
