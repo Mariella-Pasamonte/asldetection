@@ -45,7 +45,7 @@ async def predict_landmarks(file: UploadFile = File(...)):
 
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=504, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
