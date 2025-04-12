@@ -1,3 +1,7 @@
 {
-  "framework": "nextjs"
+  "build": {
+    "env": {
+      "NODE_VERSION": "14.x"
+    }
+  }
 }
