@@ -130,7 +130,9 @@ const MediaRecorderComponent: React.FC = () => {
         setErrorMessage("");
         setSubtitle(label); // update current subtitle
         speakText(label);
-      } catch (err) {}
+      } catch (err) {
+        console.log(err)
+      }
 
       count++;
     }, 5000); // every 1 second or 30th frame
