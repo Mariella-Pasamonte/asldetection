@@ -135,6 +135,7 @@ const MediaRecorderComponent: React.FC = () => {
       }
 
       count++;
+      console.log("Frame count:", count);
     }, 5000); // every 1 second or 30th frame
 
     return interval;
