@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: asl-backend
+    env: python
+    buildCommand: ""
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: MODEL_URL
+        value: https://mariella-asl-model-bucket.s3.ap-southeast-2.amazonaws.com/aslModel.pkl
