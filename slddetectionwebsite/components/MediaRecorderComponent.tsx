@@ -1,13 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import axios from "axios";
+import {
+  FilesetResolver,
+  GestureRecognizer,
+  GestureRecognizerResult,
+  DrawingUtils,
+} from "@mediapipe/tasks-vision";
 
 const MediaRecorderComponent: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   // const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const drawIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const predictIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // const [chunks, setChunks] = useState<Blob[]>([]);
+  let gestureRecognizer: GestureRecognizer;
   const [recording, setRecording] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
@@ -88,24 +96,49 @@ const MediaRecorderComponent: React.FC = () => {
     // recorder.start();
     setRecording(true);
 
-    const intervalId = startFrameCapture();
-    frameIntervalRef.current = intervalId; // store to stop later
+    const { drawInterval, predictInterval } = startFrameCapture();
+    drawIntervalRef.current = drawInterval;
+    predictIntervalRef.current = predictInterval;
   };
 
   const stopRecording = () => {
-    if (frameIntervalRef.current) {
-      stopFrameCapture(frameIntervalRef.current);
-      frameIntervalRef.current = null;
+    if (drawIntervalRef.current && predictIntervalRef.current) {
+      stopFrameCapture({
+        drawIntervalId: drawIntervalRef.current,
+        predictIntervalId: predictIntervalRef.current,
+      });
+      drawIntervalRef.current = null;
+      predictIntervalRef.current = null;
     }
     // mediaRecorderRef.current?.stop();
     setRecording(false);
   };
 
-  const startFrameCapture = () => {
-    let count = 0;
+  const createGestureRecognizer = async () => {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+    );
+    gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
+        delegate: "GPU",
+      },
+      runningMode: "IMAGE",
+      minHandDetectionConfidence: 0.1,
+      minTrackingConfidence: 0.1,
+      numHands: 2,
+    });
+  };
+  createGestureRecognizer();
 
-    const interval = setInterval(async () => {
+  const startFrameCapture = () => {
+    let results: GestureRecognizerResult;
+
+    const drawInterval = setInterval(() => {
       if (!videoRef.current || !canvasRef.current) return;
+
+      results = gestureRecognizer.recognize(videoRef.current);
 
       const ctx = canvasRef.current.getContext("2d");
       if (!ctx) return;
@@ -115,35 +148,63 @@ const MediaRecorderComponent: React.FC = () => {
 
       ctx.drawImage(videoRef.current, 0, 0);
 
-      const dataUrl = canvasRef.current.toDataURL("image/png");
-      const blob = await (await fetch(dataUrl)).blob(); // convert base64 to blob
-      const formData = new FormData();
-      formData.append("file", blob, "frame.png");
+      const drawingUtils = new DrawingUtils(ctx);
+      if (results.landmarks) {
+        for (const landmarks of results.landmarks) {
+          drawingUtils.drawConnectors(
+            landmarks,
+            GestureRecognizer.HAND_CONNECTIONS,
+            {
+              color: "#00FF00",
+              lineWidth: 5,
+            }
+          );
+          drawingUtils.drawLandmarks(landmarks, {
+            color: "#FF0000",
+            lineWidth: 2,
+          });
+        }
+      }
+    }, 100);
+
+    const predictInterval = setInterval(async () => {
+      if (!results || !results.landmarks || results.landmarks.length === 0)
+        return;
+
+      const landmarkData: number[] = [];
+      for (const landmarks of results.landmarks) {
+        for (const landmark of landmarks) {
+          landmarkData.push(landmark.x);
+          landmarkData.push(landmark.y);
+        }
+      }
 
       try {
         const response = await axios.post(
           // "http://192.168.1.11:8000/predict",
           "https://asldetection.onrender.com/predict",
-          formData
+          landmarkData
         );
+
         const label = response.data.result;
         console.log("Prediction:", label);
         setErrorMessage("");
-        setSubtitle(label); // update current subtitle
+        setSubtitle(label);
         speakText(label);
       } catch (err) {
         console.log(err);
       }
+    }, 1500);
 
-      count++;
-      console.log("Frame count:", count);
-    }, 3000); // every 1 second or 30th frame
-
-    return interval;
+    return { drawInterval, predictInterval };
   };
 
-  const stopFrameCapture = (intervalId: NodeJS.Timeout) => {
-    clearInterval(intervalId);
+  const stopFrameCapture = (intervals: {
+    drawIntervalId: NodeJS.Timeout;
+    predictIntervalId: NodeJS.Timeout;
+  }) => {
+    clearInterval(intervals.drawIntervalId);
+    clearInterval(intervals.predictIntervalId);
   };
 
   const speakText = (text: string) => {
@@ -189,7 +250,7 @@ const MediaRecorderComponent: React.FC = () => {
           className={`rounded-lg h-full ${isVideoReady ? "block" : "hidden "}`}
         />
         {subtitle && (
-          <div className="absolute bottom-20 w-full text-center">
+          <div className="absolute bottom-20 w-full text-center z-20">
             <span className="text-white text-2xl font-bold bg-black bg-opacity-50 px-4 py-1 rounded">
               {subtitle}
             </span>
@@ -200,12 +261,21 @@ const MediaRecorderComponent: React.FC = () => {
             {errorMessage}
           </div>
         )}
-
-        <canvas ref={canvasRef} style={{ display: "none" }} />
+        <canvas
+          ref={canvasRef}
+          className={`absolute top-0 left-0 z-10 ${
+            recording ? "block" : "hidden"
+          }`}
+          style={{
+            width: "100%",
+            height: "100%",
+            pointerEvents: "none",
+          }}
+        />
         <button
           onClick={recording ? stopRecording : startRecording}
           disabled={isVideoReady == false}
-          className={`absolute bottom-4 left-1/2 transform -translate-x-1/2`}
+          className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20`}
         >
           {recording ? (
             <Image
