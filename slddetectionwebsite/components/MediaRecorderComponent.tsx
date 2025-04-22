@@ -181,7 +181,7 @@ const MediaRecorderComponent: React.FC = () => {
         setSubtitle(label);
         speakText(label);
       } catch (err) {
-        console.log(err);
+        console.log("Error:",err);
       } finally {
         // Wait 4 seconds before running next prediction
         if (!isCancelled) {

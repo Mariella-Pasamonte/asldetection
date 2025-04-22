@@ -43,7 +43,7 @@ def get_model(MODEL_PATH63, MODEL_URL63, MODEL_PATH126, MODEL_URL126):
         with open(MODEL_PATH63, "rb") as f:
             model63 = pickle.load(f)
         with open(MODEL_PATH126, "rb") as f:
-            model63 = pickle.load(f)
+            model126 = pickle.load(f)
     return model63, model126
     
 def PredFunc(landmark: List[float]):
