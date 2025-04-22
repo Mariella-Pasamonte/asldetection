@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import axios from "axios";
 import {
   FilesetResolver,
@@ -10,20 +9,19 @@ import {
 
 const MediaRecorderComponent: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const predictIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  // const [chunks, setChunks] = useState<Blob[]>([]);
   let gestureRecognizer: GestureRecognizer;
-  const [recording, setRecording] = useState(false);
+  const [ASLDetecting, setASLDetecting] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
   const [subtitle, setSubtitle] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const subtitleRef = useRef(subtitle);
+  const cancelPredictRef = useRef<(() => void) | null>(null);
 
-  const startWebcam = async () => {
+  const startWebcam = async (): Promise<void> => {
     try {
       stopCurrentStream();
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -34,7 +32,7 @@ const MediaRecorderComponent: React.FC = () => {
     } catch (err) {
       console.error("Error starting webcam:", err);
       setErrorMessage(
-        "Camera not available. Please check your permissions or device."
+        `Camera not available. ${err}. Please check your permissions or device.`
       );
     }
   };
@@ -49,7 +47,7 @@ const MediaRecorderComponent: React.FC = () => {
       attachStreamToVideo(stream);
     } catch (err) {
       console.error("Error starting screen share:", err);
-      setErrorMessage("Screen sharing failed.");
+      setErrorMessage(`Screen sharing failed. ${err}.`);
     }
   };
 
@@ -69,49 +67,36 @@ const MediaRecorderComponent: React.FC = () => {
     }
   };
 
-  const startRecording = () => {
+  const startASLDetection = (): void => {
     const stream = videoRef.current?.srcObject as MediaStream;
     if (!stream) return;
 
-    // const recorder = new MediaRecorder(stream);
-    // mediaRecorderRef.current = recorder;
-    // setChunks([]);
+    setASLDetecting(true);
 
-    // recorder.ondataavailable = (e) => {
-    //   if (e.data.size > 0) {
-    //     setChunks((prev) => [...prev, e.data]);
-    //   }
-    // };
-
-    // recorder.onstop = () => {
-    //   const blob = new Blob(chunks, { type: "video/webm" });
-    //   const url = URL.createObjectURL(blob);
-    //   const a = document.createElement("a");
-    //   a.href = url;
-    //   a.download = "recording.webm";
-    //   a.click();
-    //   URL.revokeObjectURL(url);
-    // };
-
-    // recorder.start();
-    setRecording(true);
-
-    const { drawInterval, predictInterval } = startFrameCapture();
+    const { drawInterval, predictInterval, cancel } = startFrameCapture();
     drawIntervalRef.current = drawInterval;
     predictIntervalRef.current = predictInterval;
+    cancelPredictRef.current = cancel;
   };
 
-  const stopRecording = () => {
-    if (drawIntervalRef.current && predictIntervalRef.current) {
-      stopFrameCapture({
-        drawIntervalId: drawIntervalRef.current,
-        predictIntervalId: predictIntervalRef.current,
-      });
+  const stopASLDetection = (): void => {
+    if (drawIntervalRef.current) {
+      clearInterval(drawIntervalRef.current);
       drawIntervalRef.current = null;
+    }
+
+    if (predictIntervalRef.current) {
+      clearTimeout(predictIntervalRef.current);
       predictIntervalRef.current = null;
     }
-    // mediaRecorderRef.current?.stop();
-    setRecording(false);
+
+    if (cancelPredictRef.current) {
+      cancelPredictRef.current(); // Stops recursive prediction loop
+      cancelPredictRef.current = null;
+    }
+
+    setASLDetecting(false);
+    setSubtitle("");
   };
 
   const createGestureRecognizer = async () => {
@@ -134,6 +119,8 @@ const MediaRecorderComponent: React.FC = () => {
 
   const startFrameCapture = () => {
     let results: GestureRecognizerResult;
+    let predictTimeout: NodeJS.Timeout | null = null;
+    let isCancelled = false;
 
     const drawInterval = setInterval(() => {
       if (!videoRef.current || !canvasRef.current) return;
@@ -167,44 +154,52 @@ const MediaRecorderComponent: React.FC = () => {
       }
     }, 100);
 
-    const predictInterval = setInterval(async () => {
-      if (!results || !results.landmarks || results.landmarks.length === 0)
+    const predictLoop = async () => {
+      if (isCancelled) return;
+
+      if (!results || !results.landmarks || results.landmarks.length === 0) {
+        predictTimeout = setTimeout(predictLoop, 1000); // Try again later
         return;
+      }
 
       const landmarkData: number[] = [];
       for (const landmarks of results.landmarks) {
         for (const landmark of landmarks) {
           landmarkData.push(landmark.x);
           landmarkData.push(landmark.y);
+          landmarkData.push(landmark.z);
         }
       }
 
       try {
         const response = await axios.post(
-          // "http://192.168.1.11:8000/predict",
           "https://asldetection.onrender.com/predict",
           landmarkData
         );
-
         const label = response.data.result;
-        console.log("Prediction:", label);
         setErrorMessage("");
         setSubtitle(label);
         speakText(label);
       } catch (err) {
         console.log(err);
+      } finally {
+        // Wait 4 seconds before running next prediction
+        if (!isCancelled) {
+          predictTimeout = setTimeout(predictLoop, 3000);
+        }
       }
-    }, 1500);
+    };
 
-    return { drawInterval, predictInterval };
-  };
+    predictLoop();
 
-  const stopFrameCapture = (intervals: {
-    drawIntervalId: NodeJS.Timeout;
-    predictIntervalId: NodeJS.Timeout;
-  }) => {
-    clearInterval(intervals.drawIntervalId);
-    clearInterval(intervals.predictIntervalId);
+    return {
+      drawInterval,
+      predictInterval: predictTimeout,
+      cancel: () => {
+        isCancelled = true;
+        if (predictTimeout) clearTimeout(predictTimeout);
+      },
+    };
   };
 
   const speakText = (text: string) => {
@@ -264,7 +259,7 @@ const MediaRecorderComponent: React.FC = () => {
         <canvas
           ref={canvasRef}
           className={`absolute top-0 left-0 z-10 ${
-            recording ? "block" : "hidden"
+            ASLDetecting ? "block" : "hidden"
           }`}
           style={{
             width: "100%",
@@ -272,27 +267,33 @@ const MediaRecorderComponent: React.FC = () => {
             pointerEvents: "none",
           }}
         />
-        <button
-          onClick={recording ? stopRecording : startRecording}
-          disabled={isVideoReady == false}
-          className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20`}
-        >
-          {recording ? (
-            <Image
-              src="/stop record.png"
-              alt="Stop Recording"
-              width={50}
-              height={50}
-            />
-          ) : (
-            <Image
-              src="/record.png"
-              alt="Start Recording"
-              width={50}
-              height={50}
-            />
-          )}
-        </button>
+        <label className="absolute bottom-2 left-2 inline-flex items-center cursor-pointer z-20">
+          <input
+            type="checkbox"
+            onChange={(e) => {
+              const checked = e.target.checked;
+              if (checked) {
+                startASLDetection();
+              } else {
+                stopASLDetection();
+              }
+            }}
+            disabled={isVideoReady == false}
+            className="sr-only peer"
+          />
+          <div
+            className={`relative w-11 h-6 ${
+              isVideoReady ? "bg-gray-200" : "bg-gray-800"
+            } peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600 dark:peer-checked:bg-blue-600`}
+          ></div>
+          <span
+            className={`ms-3 text-sm font-medium ${
+              isVideoReady ? "text-black" : "text-white"
+            } dark:text-gray-300`}
+          >
+            {ASLDetecting ? "Hand Detection is on" : "Hand Detection is off"}
+          </span>
+        </label>
       </div>
       <div className="grid grid-cols-4 mt-4 space-x-2 content-center place-items-center">
         <button

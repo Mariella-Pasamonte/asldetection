@@ -19,12 +19,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_URL = f"https://mariella-asl-model-bucket.s3.ap-southeast-2.amazonaws.com/aslModel.pkl"
-MODEL_PATH = "/tmp/aslModel.pkl"
-model = None
+MODEL_URL63 = f"https://mariella-asl-model-bucket.s3.ap-southeast-2.amazonaws.com/aslModel63(complete).pkl"
+MODEL_PATH63 = "/tmp/aslModel63(complete).pkl"
+MODEL_URL126 = f"https://mariella-asl-model-bucket.s3.ap-southeast-2.amazonaws.com/aslModel126(complete).pkl"
+MODEL_PATH126 = "/tmp/aslModel126(complete).pkl"
+model63 = None
+model126 = None
 
 
-def download_model():
+def download_model(MODEL_PATH,MODEL_URL):
     if not os.path.exists(MODEL_PATH):
         print("Downloading model from S3...")
         response = requests.get(MODEL_URL)
@@ -32,23 +35,20 @@ def download_model():
             f.write(response.content)
         print("Model downloaded.")
 
-def get_model():
-    global model
-    if model is None:
-        download_model()  # Download model if not loaded already
-        with open(MODEL_PATH, "rb") as f:
-            model = pickle.load(f)
-    return model
-
-# model_path = os.path.join(os.path.dirname(__file__), "model", "aslModel(a-cAndKira)150(80-20-100).pkl")
-
-# with open(model_path, "rb") as f:
-#     model=pickle.load(f)
+def get_model(MODEL_PATH63, MODEL_URL63, MODEL_PATH126, MODEL_URL126):
+    global model63, model126
+    if model63 is None or model126 is None:
+        download_model(MODEL_PATH63, MODEL_URL63)  # Download model if not loaded already
+        download_model(MODEL_PATH126, MODEL_URL126)
+        with open(MODEL_PATH63, "rb") as f:
+            model63 = pickle.load(f)
+        with open(MODEL_PATH126, "rb") as f:
+            model63 = pickle.load(f)
+    return model63, model126
     
 def PredFunc(landmark: List[float]):
-    model = get_model()
-    prediction = predictASL(model, landmark)
-    print("prediction:",prediction[0])
+    model63, model126 = get_model(MODEL_PATH63, MODEL_URL63, MODEL_PATH126, MODEL_URL126)
+    prediction = predictASL(model63, model126, landmark)
     if prediction:
         return(prediction[0])
     else: 
@@ -67,5 +67,4 @@ if __name__ == "__main__":
     import uvicorn
     
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    # uvicorn.run(app, host="192.168.1.11", port=8000)
 
